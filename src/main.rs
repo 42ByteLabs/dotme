@@ -41,7 +41,15 @@ async fn main() -> Result<()> {
             folders,
             dry_run,
         }) => {
-            if let Err(e) = dotfiles::add(source, target.clone(), path.clone(), folders.clone(), *dry_run).await {
+            if let Err(e) = dotfiles::add(
+                source,
+                target.clone(),
+                path.clone(),
+                folders.clone(),
+                *dry_run,
+            )
+            .await
+            {
                 error!("Failed to add dotfile: {}", e);
                 std::process::exit(1);
             }
