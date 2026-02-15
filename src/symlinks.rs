@@ -223,7 +223,7 @@ impl SymlinkState {
 /// Create a symlink from `link` to `target`
 /// Verifies the system state before creating and updates the state file
 pub async fn create_symlink(link: &Path, target: &Path) -> Result<()> {
-    log::info!("Creating symlink: {:?} -> {:?}", link, target);
+    log::debug!("Creating symlink: {:?} -> {:?}", link, target);
 
     // Verify target exists
     if !target.exists() {
@@ -244,7 +244,7 @@ pub async fn create_symlink(link: &Path, target: &Path) -> Result<()> {
             let actual = normalize_path(&current_target)?;
 
             if expected == actual {
-                log::info!("Symlink already exists and points to correct target");
+                log::debug!("Symlink already exists and points to correct target");
 
                 // Update state
                 let mut state = SymlinkState::load().await?;
@@ -303,7 +303,7 @@ pub async fn create_symlink(link: &Path, target: &Path) -> Result<()> {
         }
     }
 
-    log::info!(
+    log::debug!(
         "✓ Created symlink: {} -> {}",
         link.display(),
         target.display()
@@ -320,7 +320,7 @@ pub async fn create_symlink(link: &Path, target: &Path) -> Result<()> {
 /// Remove a symlink and update the state file
 /// Only removes if the path is actually a symlink
 pub async fn remove_symlink(link: &Path) -> Result<()> {
-    log::info!("Removing symlink: {:?}", link);
+    log::debug!("Removing symlink: {:?}", link);
 
     // Verify it's a symlink before removing
     if link.symlink_metadata().is_ok() {
@@ -338,7 +338,7 @@ pub async fn remove_symlink(link: &Path) -> Result<()> {
             .await
             .context("Failed to remove symlink")?;
 
-        log::info!("✓ Removed symlink: {}", link.display());
+        log::debug!("✓ Removed symlink: {}", link.display());
     } else {
         log::warn!("Symlink does not exist: {:?}", link);
     }

@@ -297,40 +297,35 @@ pub async fn update(dry_run: bool) -> Result<()> {
             dirs::home_dir().context("Failed to get home directory")?
         };
 
-        // Remove old symlinks before creating new ones
-        remove_symlinks_for_entry(entry, Some(&base_path), dry_run).await?;
-
-        match entry.r#type {
-            SourceType::File => {
-                // For files, we create symlinks instead of copying
-                create_symlinks_for_entry(entry, &base_path, dry_run).await?;
-            }
-            SourceType::Directory => {
-                // For directories, we create symlinks instead of copying
-                create_symlinks_for_entry(entry, &base_path, dry_run).await?;
-            }
-            SourceType::Git => {
-                // If repository doesn't exist, clone it
-                if !entry.target.exists() {
-                    if dry_run {
-                        println!("[DRY RUN] Would clone repository: {}", entry.source);
-                    } else {
-                        log::info!("Repository not found, cloning...");
-                        git::clone(&entry.source, &entry.target).await?;
-                    }
+        // Step 1: Update git repositories first (if applicable)
+        if matches!(entry.r#type, SourceType::Git) {
+            // If repository doesn't exist, clone it
+            if !entry.target.exists() {
+                if dry_run {
+                    println!("[DRY RUN] Would clone repository: {}", entry.source);
                 } else {
-                    // Otherwise, pull latest changes
-                    if dry_run {
-                        println!("[DRY RUN] Would pull latest changes from: {}", entry.source);
-                    } else {
-                        git::pull(&entry.target).await?;
-                    }
+                    log::info!("Repository not found, cloning...");
+                    git::clone(&entry.source, &entry.target).await?;
                 }
-
-                // Create symlinks for git repository folders
-                create_symlinks_for_entry(entry, &base_path, dry_run).await?;
+            } else {
+                // Otherwise, pull latest changes
+                if dry_run {
+                    println!("[DRY RUN] Would pull latest changes from: {}", entry.source);
+                } else {
+                    git::pull(&entry.target).await?;
+                }
             }
         }
+
+        // Step 2: Remove old symlinks before creating new ones
+        let removed_count = remove_symlinks_for_entry(entry, Some(&base_path), dry_run).await?;
+        if removed_count > 0 {
+            log::info!("Removing old symlinks");
+        }
+
+        // Step 3: Create new symlinks
+        log::info!("Creating new symlinks");
+        create_symlinks_for_entry(entry, &base_path, dry_run).await?;
     }
 
     // Update the timestamp (only if not dry run)
@@ -642,7 +637,7 @@ async fn remove_symlinks_for_entry(
             match symlinks::remove_symlink(link).await {
                 Ok(_) => {
                     removed_count += 1;
-                    log::info!("  ✓ Removed symlink: {}", link.display());
+                    log::debug!("  ✓ Removed symlink: {}", link.display());
                 }
                 Err(e) => {
                     log::warn!("  ✗ Failed to remove symlink {}: {}", link.display(), e);
