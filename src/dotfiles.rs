@@ -297,37 +297,35 @@ pub async fn update(dry_run: bool) -> Result<()> {
             dirs::home_dir().context("Failed to get home directory")?
         };
 
-        match entry.r#type {
-            SourceType::File => {
-                // For files, we create symlinks instead of copying
-                create_symlinks_for_entry(entry, &base_path, dry_run).await?;
-            }
-            SourceType::Directory => {
-                // For directories, we create symlinks instead of copying
-                create_symlinks_for_entry(entry, &base_path, dry_run).await?;
-            }
-            SourceType::Git => {
-                // If repository doesn't exist, clone it
-                if !entry.target.exists() {
-                    if dry_run {
-                        println!("[DRY RUN] Would clone repository: {}", entry.source);
-                    } else {
-                        log::info!("Repository not found, cloning...");
-                        git::clone(&entry.source, &entry.target).await?;
-                    }
+        // Step 1: Update git repositories first (if applicable)
+        if matches!(entry.r#type, SourceType::Git) {
+            // If repository doesn't exist, clone it
+            if !entry.target.exists() {
+                if dry_run {
+                    println!("[DRY RUN] Would clone repository: {}", entry.source);
                 } else {
-                    // Otherwise, pull latest changes
-                    if dry_run {
-                        println!("[DRY RUN] Would pull latest changes from: {}", entry.source);
-                    } else {
-                        git::pull(&entry.target).await?;
-                    }
+                    log::info!("Repository not found, cloning...");
+                    git::clone(&entry.source, &entry.target).await?;
                 }
-
-                // Create symlinks for git repository folders
-                create_symlinks_for_entry(entry, &base_path, dry_run).await?;
+            } else {
+                // Otherwise, pull latest changes
+                if dry_run {
+                    println!("[DRY RUN] Would pull latest changes from: {}", entry.source);
+                } else {
+                    git::pull(&entry.target).await?;
+                }
             }
         }
+
+        // Step 2: Remove old symlinks before creating new ones
+        let removed_count = remove_symlinks_for_entry(entry, Some(&base_path), dry_run).await?;
+        if removed_count > 0 {
+            log::info!("Removing old symlinks");
+        }
+
+        // Step 3: Create new symlinks
+        log::info!("Creating new symlinks");
+        create_symlinks_for_entry(entry, &base_path, dry_run).await?;
     }
 
     // Update the timestamp (only if not dry run)
@@ -444,7 +442,7 @@ pub async fn remove(source: Option<String>) -> Result<()> {
 
     // Remove associated symlinks
     log::info!("Removing associated symlinks...");
-    let removed_count = remove_symlinks_for_entry(&entry_to_remove).await?;
+    let removed_count = remove_symlinks_for_entry(&entry_to_remove, None, false).await?;
     if removed_count > 0 {
         log::info!("✓ Removed {} symlink(s)", removed_count);
     } else {
@@ -582,7 +580,11 @@ fn format_timestamp(timestamp: &str) -> String {
 }
 
 /// Remove all symlinks associated with a dotfile entry
-async fn remove_symlinks_for_entry(entry: &DotfileEntry) -> Result<usize> {
+async fn remove_symlinks_for_entry(
+    entry: &DotfileEntry,
+    _base_path: Option<&Path>,
+    dry_run: bool,
+) -> Result<usize> {
     use crate::symlinks::SymlinkState;
 
     // Load symlink state
@@ -596,7 +598,7 @@ async fn remove_symlinks_for_entry(entry: &DotfileEntry) -> Result<usize> {
     let mut symlinks_to_remove = Vec::new();
 
     // Determine the base path to match against
-    let base_path = match entry.r#type {
+    let target_path = match entry.r#type {
         SourceType::File => {
             // For files, the target is the actual file path
             Path::new(&entry.source).to_path_buf()
@@ -611,12 +613,12 @@ async fn remove_symlinks_for_entry(entry: &DotfileEntry) -> Result<usize> {
         }
     };
 
-    log::debug!("Looking for symlinks pointing to: {:?}", base_path);
+    log::debug!("Looking for symlinks pointing to: {:?}", target_path);
 
-    // Find all symlinks that point to paths under the base path
+    // Find all symlinks that point to paths under the target path
     for symlink_entry in &state.symlinks {
-        // Check if the symlink target starts with the base path
-        if symlink_entry.target.starts_with(&base_path) {
+        // Check if the symlink target starts with the target path
+        if symlink_entry.target.starts_with(&target_path) {
             log::debug!(
                 "Found symlink to remove: {} -> {}",
                 symlink_entry.link.display(),
@@ -628,13 +630,18 @@ async fn remove_symlinks_for_entry(entry: &DotfileEntry) -> Result<usize> {
 
     // Remove the symlinks
     for link in &symlinks_to_remove {
-        match symlinks::remove_symlink(link).await {
-            Ok(_) => {
-                removed_count += 1;
-                log::info!("  ✓ Removed symlink: {}", link.display());
-            }
-            Err(e) => {
-                log::warn!("  ✗ Failed to remove symlink {}: {}", link.display(), e);
+        if dry_run {
+            println!("[DRY RUN] Would remove old symlink: {}", link.display());
+            removed_count += 1;
+        } else {
+            match symlinks::remove_symlink(link).await {
+                Ok(_) => {
+                    removed_count += 1;
+                    log::debug!("  ✓ Removed symlink: {}", link.display());
+                }
+                Err(e) => {
+                    log::warn!("  ✗ Failed to remove symlink {}: {}", link.display(), e);
+                }
             }
         }
     }
