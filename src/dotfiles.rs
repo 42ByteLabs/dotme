@@ -91,6 +91,10 @@ fn detect_source_type(source: &str) -> Result<SourceType> {
     };
 
     if expanded_path.is_dir() {
+        // Check if it's a git repository by looking for .git folder
+        if expanded_path.join(".git").exists() {
+            return Ok(SourceType::Git);
+        }
         return Ok(SourceType::Directory);
     }
 
@@ -135,12 +139,19 @@ pub async fn add(
 
     log::debug!("Symlinks will be created in: {}", base_path.display());
 
+    // Check if this is a local git repository (has .git folder)
+    let is_local_git = matches!(source_type, SourceType::Git)
+        && !source.starts_with("https://")
+        && !source.starts_with("http://")
+        && !source.starts_with("git@")
+        && !source.starts_with("ssh://");
+
     // Determine target location
     let target = if let Some(t) = target {
         t
     } else {
-        // For git repos, store in ~/.dotme/git directory
-        if matches!(source_type, SourceType::Git) {
+        // For remote git repos, store in ~/.dotme/git directory
+        if matches!(source_type, SourceType::Git) && !is_local_git {
             let git_dir = get_git_dir()?;
             // Extract repo name from git URL
             let repo_name = source
@@ -149,6 +160,14 @@ pub async fn add(
                 .unwrap_or("repo")
                 .trim_end_matches(".git");
             git_dir.join(repo_name)
+        } else if is_local_git {
+            // For local git repos, use the source path as-is
+            let source_path = Path::new(source);
+            if source_path.is_absolute() {
+                source_path.to_path_buf()
+            } else {
+                std::env::current_dir()?.join(source_path)
+            }
         } else {
             // For local files/directories, use base_path
             let source_path = Path::new(source);
@@ -164,13 +183,17 @@ pub async fn add(
         anyhow::bail!("Source '{}' is already being managed", source);
     }
 
-    // For git repositories, clone them immediately
+    // For git repositories, clone them immediately (only remote repos)
     let selected_folders = if matches!(source_type, SourceType::Git) {
         // Check if git is available
         git::check_git_available().await?;
 
-        // Clone the repository
-        git::clone(source, &target).await?;
+        // Only clone if it's a remote repository
+        if !is_local_git {
+            git::clone(source, &target).await?;
+        } else {
+            log::info!("Using local git repository at: {}", target.display());
+        }
 
         // If path is set, skip folder selection and use repo root (None means entire repo)
         // This overrides any --folders flag to ensure root-level symlinking
