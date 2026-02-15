@@ -472,17 +472,28 @@ pub async fn remove(source: Option<String>) -> Result<()> {
         log::info!("No symlinks to remove");
     }
 
-    // If it's a git repository, remove the cloned directory
+    // If it's a git repository, remove the cloned directory only if it's in the git_dir
     if matches!(entry_to_remove.r#type, SourceType::Git) {
-        if entry_to_remove.target.exists() {
+        let git_dir = config.paths.get_git_dir()?;
+
+        // Check if the target is within the git_dir
+        if entry_to_remove.target.starts_with(&git_dir) {
+            if entry_to_remove.target.exists() {
+                log::info!(
+                    "Deleting git repository at: {}",
+                    entry_to_remove.target.display()
+                );
+                fs::remove_dir_all(&entry_to_remove.target)
+                    .await
+                    .context("Failed to remove git repository directory")?;
+                log::info!("✓ Git repository deleted");
+            }
+        } else {
             log::info!(
-                "Deleting git repository at: {}",
-                entry_to_remove.target.display()
+                "Skipping deletion of git repository at '{}' (not in git_dir: '{}')",
+                entry_to_remove.target.display(),
+                git_dir.display()
             );
-            fs::remove_dir_all(&entry_to_remove.target)
-                .await
-                .context("Failed to remove git repository directory")?;
-            log::info!("✓ Git repository deleted");
         }
     }
 
