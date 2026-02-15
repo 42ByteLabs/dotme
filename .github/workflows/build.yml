@@ -1,0 +1,23 @@
+name: Build and Test
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    # https://github.com/42ByteLabs/.github/blob/main/.github/workflows/cargo-build.yml
+    uses: 42ByteLabs/.github/.github/workflows/cargo.yml@main
+    secrets: inherit
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    with:
+      examples: "false"

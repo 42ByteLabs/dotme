@@ -1,0 +1,24 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  project:
+    # https://github.com/42ByteLabs/.github/blob/main/.github/workflows/project.yml
+    uses: 42ByteLabs/.github/.github/workflows/project.yml@main
+    secrets: inherit
+
+  cargo-publish:
+    # https://github.com/42ByteLabs/.github/blob/main/.github/workflows/cargo-publish.yml
+    uses: 42ByteLabs/.github/.github/workflows/cargo-publish.yml@main
+    if: ${{ needs.project.outputs.release == 'true' }}
+    needs: [ project ]
+    secrets: inherit
+    with:
+      crate: dotme
