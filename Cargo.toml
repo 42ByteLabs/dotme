@@ -1,6 +1,9 @@
 [package]
 name = "dotme"
+description = "A dotfiles manager written in Rust."
 version = "0.1.0"
+license = "MIT"
+readme = "README.md"
 
 edition = "2024"
 rust-version = "1.85"
