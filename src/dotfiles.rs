@@ -126,8 +126,8 @@ pub async fn add(
     log::info!("Detected source type: {}", source_type);
 
     // Determine the base path for symlinks (where they will be created)
-    let base_path = if let Some(p) = path {
-        p
+    let base_path = if let Some(ref p) = path {
+        p.clone()
     } else {
         // Default to current working directory
         std::env::current_dir().context("Failed to get current working directory")?
@@ -172,8 +172,17 @@ pub async fn add(
         // Clone the repository
         git::clone(source, &target).await?;
 
-        // If folders weren't specified via CLI, prompt the user
-        if folders.is_none() {
+        // If path is set, skip folder selection and use repo root (None means entire repo)
+        // This overrides any --folders flag to ensure root-level symlinking
+        if path.is_some() {
+            if folders.is_some() {
+                log::warn!("--path flag overrides --folders; symlinking from repository root");
+            } else {
+                log::info!("Path specified, symlinking from repository root");
+            }
+            None
+        } else if folders.is_none() {
+            // If folders weren't specified via CLI and no path, prompt the user
             prompt_folder_selection(&target).await?
         } else {
             folders
@@ -577,7 +586,7 @@ async fn remove_symlinks_for_entry(entry: &DotfileEntry) -> Result<usize> {
     use crate::symlinks::SymlinkState;
 
     // Load symlink state
-    let mut state = SymlinkState::load().await?;
+    let state = SymlinkState::load().await?;
 
     if state.symlinks.is_empty() {
         return Ok(0);
