@@ -140,7 +140,11 @@ pub async fn add(
     log::debug!("Symlinks will be created in: {}", base_path.display());
 
     // Validate that base_path is not inside the source directory to prevent circular symlinks
-    let source_path = if matches!(source_type, SourceType::Git) && !source.starts_with("http") && !source.starts_with("git@") && !source.starts_with("ssh://") {
+    let source_path = if matches!(source_type, SourceType::Git)
+        && !source.starts_with("http")
+        && !source.starts_with("git@")
+        && !source.starts_with("ssh://")
+    {
         // For local git repos or directories, normalize the path
         let p = Path::new(source);
         if p.is_absolute() {
