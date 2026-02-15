@@ -132,7 +132,7 @@ pub async fn add(
         // Default to current working directory
         std::env::current_dir().context("Failed to get current working directory")?
     };
-    
+
     log::debug!("Symlinks will be created in: {}", base_path.display());
 
     // Determine target location
@@ -279,7 +279,7 @@ pub async fn update(dry_run: bool) -> Result<()> {
 
     for entry in &config.dotfiles {
         log::info!("Processing: {} [{}]", entry.source, entry.r#type);
-        
+
         // Determine the base path for symlinks
         let base_path = if let Some(ref p) = entry.path {
             p.clone()
@@ -634,7 +634,11 @@ async fn remove_symlinks_for_entry(entry: &DotfileEntry) -> Result<usize> {
 }
 
 /// Create symlinks for a dotfile entry following the symlink creation rules
-async fn create_symlinks_for_entry(entry: &DotfileEntry, base_path: &Path, dry_run: bool) -> Result<()> {
+async fn create_symlinks_for_entry(
+    entry: &DotfileEntry,
+    base_path: &Path,
+    dry_run: bool,
+) -> Result<()> {
     match entry.r#type {
         SourceType::File => {
             // For files: create symlink if target doesn't exist
