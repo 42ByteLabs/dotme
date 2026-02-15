@@ -133,11 +133,45 @@ pub async fn add(
     let base_path = if let Some(ref p) = path {
         p.clone()
     } else {
-        // Default to current working directory
-        std::env::current_dir().context("Failed to get current working directory")?
+        // Default to home directory to avoid symlinking into the source itself
+        dirs::home_dir().context("Failed to get home directory")?
     };
 
     log::debug!("Symlinks will be created in: {}", base_path.display());
+
+    // Validate that base_path is not inside the source directory to prevent circular symlinks
+    let source_path = if matches!(source_type, SourceType::Git) && !source.starts_with("http") && !source.starts_with("git@") && !source.starts_with("ssh://") {
+        // For local git repos or directories, normalize the path
+        let p = Path::new(source);
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            std::env::current_dir()?.join(p)
+        }
+    } else if !matches!(source_type, SourceType::Git) {
+        // For local files/directories
+        let p = Path::new(source);
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            std::env::current_dir()?.join(p)
+        }
+    } else {
+        // For remote git repos, skip this check
+        PathBuf::new()
+    };
+
+    // Check if base_path is the same as or inside the source directory
+    if !source_path.as_os_str().is_empty() && source_path.is_dir() {
+        if base_path == source_path || base_path.starts_with(&source_path) {
+            anyhow::bail!(
+                "Cannot create symlinks in '{}' because it is the same as or inside the source directory '{}'. \
+                Use --path to specify a different location for symlinks.",
+                base_path.display(),
+                source_path.display()
+            );
+        }
+    }
 
     // Check if this is a local git repository (has .git folder)
     let is_local_git = matches!(source_type, SourceType::Git)
@@ -489,7 +523,7 @@ pub async fn remove(source: Option<String>) -> Result<()> {
                 log::info!("✓ Git repository deleted");
             }
         } else {
-            log::info!(
+            log::debug!(
                 "Skipping deletion of git repository at '{}' (not in git_dir: '{}')",
                 entry_to_remove.target.display(),
                 git_dir.display()
