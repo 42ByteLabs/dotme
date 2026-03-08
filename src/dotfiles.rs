@@ -551,11 +551,14 @@ pub async fn remove(source: Option<String>) -> Result<()> {
 
 /// Prompt user to select indexing mode and folders from a git repository
 async fn prompt_folder_selection(repo_path: &Path) -> Result<Option<Vec<String>>> {
-    use dialoguer::{Select, MultiSelect, theme::ColorfulTheme};
+    use dialoguer::{MultiSelect, Select, theme::ColorfulTheme};
 
     // First prompt: Choose indexing mode
-    let indexing_options = vec!["Root (map repository root to HOME)", "Folders (select specific folders)"];
-    
+    let indexing_options = vec![
+        "Root (map repository root to HOME)",
+        "Folders (select specific folders)",
+    ];
+
     println!("\nSelect indexing mode for git repository:");
     let indexing_selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("Indexing mode")
@@ -609,8 +612,7 @@ async fn prompt_folder_selection(repo_path: &Path) -> Result<Option<Vec<String>>
     }
 
     // Map selections to folder names
-    let selected_folders: Vec<String> =
-        selections.iter().map(|&i| folders[i].clone()).collect();
+    let selected_folders: Vec<String> = selections.iter().map(|&i| folders[i].clone()).collect();
 
     log::info!("Selected folders: {}", selected_folders.join(", "));
     Ok(Some(selected_folders))
