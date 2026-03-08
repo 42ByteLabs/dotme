@@ -549,9 +549,28 @@ pub async fn remove(source: Option<String>) -> Result<()> {
     Ok(())
 }
 
-/// Prompt user to select folders from a git repository
+/// Prompt user to select indexing mode and folders from a git repository
 async fn prompt_folder_selection(repo_path: &Path) -> Result<Option<Vec<String>>> {
-    use dialoguer::{MultiSelect, theme::ColorfulTheme};
+    use dialoguer::{Select, MultiSelect, theme::ColorfulTheme};
+
+    // First prompt: Choose indexing mode
+    let indexing_options = vec!["Root (map repository root to HOME)", "Folders (select specific folders)"];
+    
+    println!("\nSelect indexing mode for git repository:");
+    let indexing_selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("Indexing mode")
+        .items(&indexing_options)
+        .default(0)
+        .interact()?;
+
+    // If "root" is selected (index 0), return None to indicate entire repo
+    if indexing_selection == 0 {
+        log::info!("Root indexing selected - mapping repository root to HOME directory");
+        return Ok(None);
+    }
+
+    // If "folders" is selected (index 1), proceed with folder selection
+    log::info!("Folders indexing selected - prompting for folder selection");
 
     // Get all top-level directories in the repository
     let mut folders = Vec::new();
@@ -576,16 +595,12 @@ async fn prompt_folder_selection(repo_path: &Path) -> Result<Option<Vec<String>>
     // Sort folders alphabetically
     folders.sort();
 
-    // Add "All folders" as the first option
-    let mut display_items = vec!["All folders".to_string()];
-    display_items.extend(folders.clone());
-
     println!("\nSelect folders to sync to your home directory:");
     println!("(Use Space to select/deselect, Enter to confirm)");
 
     let selections = MultiSelect::with_theme(&ColorfulTheme::default())
         .with_prompt("Select folders")
-        .items(&display_items)
+        .items(&folders)
         .interact()?;
 
     if selections.is_empty() {
@@ -593,22 +608,12 @@ async fn prompt_folder_selection(repo_path: &Path) -> Result<Option<Vec<String>>
         return Ok(None);
     }
 
-    // Check if "All folders" (index 0) was selected
-    if selections.contains(&0) {
-        log::info!("All folders selected");
-        return Ok(None);
-    }
-
-    // Map selections back to folder names (subtract 1 because of "All folders" option)
+    // Map selections to folder names
     let selected_folders: Vec<String> =
-        selections.iter().map(|&i| folders[i - 1].clone()).collect();
+        selections.iter().map(|&i| folders[i].clone()).collect();
 
-    if selected_folders.is_empty() {
-        Ok(None)
-    } else {
-        log::info!("Selected folders: {}", selected_folders.join(", "));
-        Ok(Some(selected_folders))
-    }
+    log::info!("Selected folders: {}", selected_folders.join(", "));
+    Ok(Some(selected_folders))
 }
 
 /// Sync specific folders from a git repository to the home directory
